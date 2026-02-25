@@ -1,0 +1,719 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+from datetime import datetime
+import sqlite3
+import os
+import qrcode
+import webbrowser
+
+# ✅ ADD THIS
+DB = "rs_mobiles_ultra.db"
+
+from reportlab.platypus import *
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_RIGHT, TA_CENTER
+from reportlab.lib.pagesizes import A5
+from reportlab.lib import colors
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+
+# ================= DATABASE =================
+def create_database():  
+    conn = sqlite3.connect(DB)
+    cur = conn.cursor()
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS products(
+        code TEXT PRIMARY KEY,  
+        name TEXT,  
+        cost_price INTEGER,  
+        sell_price INTEGER,  
+        stock INTEGER
+    )""")
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS customers(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,  
+        name TEXT,  
+        mobile TEXT
+    )""")
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS bills(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,  
+        bill_no TEXT,  
+        customer TEXT,  
+        mobile TEXT,  
+        total INTEGER,  
+        discount INTEGER,  
+        final_total INTEGER,  
+        profit INTEGER,  
+        payment TEXT,  
+        date TEXT
+    )""")
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS purchases(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,  
+        product_code TEXT,  
+        supplier TEXT,  
+        qty INTEGER,  
+        date TEXT
+    )""")
+
+    conn.commit()
+    conn.close()
+
+create_database()
+
+# ================= LOGIN =================
+def check_login():  
+    if user.get() == "admin" and pwd.get() == "1234":  
+        login.destroy()
+        dashboard()
+    else:  
+        messagebox.showerror("Error", "Wrong Login")
+
+# ================= DASHBOARD =================
+def dashboard():  
+    root = tk.Tk()
+    root.title("RS Mobiles ULTRA PRO MAX")
+    root.geometry("1100x650")
+    root.configure(bg="#0f172a")
+
+    tk.Label(root, text="RS MOBILES - ULTRA PRO MAX",  
+             font=("Arial", 20, "bold"),  
+             bg="#0f172a", fg="white").pack(pady=20)
+
+    btn = {"font": ("Arial", 14, "bold"),  
+           "width": 25, "height": 2,  
+           "bg": "#2563eb", "fg": "white"}
+
+    tk.Button(root, text="ADD PRODUCT", command=add_product, **btn).pack(pady=8)
+    tk.Button(root, text="NEW BILL", command=new_bill, **btn).pack(pady=8)
+    tk.Button(root, text="STOCK REPORT", command=stock_report, **btn).pack(pady=8)
+    tk.Button(root, text="BILL HISTORY", command=bill_history, **btn).pack(pady=8)
+    tk.Button(root, text="DAILY REPORT", command=daily_report, **btn).pack(pady=8)
+    tk.Button(root, text="PROFIT REPORT", command=profit_report, **btn).pack(pady=8)
+    tk.Button(root, text="PURCHASE ENTRY", command=purchase_entry, **btn).pack(pady=8)
+    tk.Button(root, text="ADD CUSTOMER", width=20, command=add_customer).pack(pady=5)
+    tk.Button(root, text="VIEW CUSTOMERS", width=20, command=view_customers).pack(pady=5)
+    check_low_stock()
+
+    
+# ================= LOW STOCK ALERT =================
+def check_low_stock():  
+    try:
+        conn = sqlite3.connect(DB)
+        cur = conn.cursor()
+        cur.execute("SELECT name, stock FROM products WHERE stock <= 3")
+        low_items = cur.fetchall()
+        conn.close()
+
+        if low_items:  
+            msg = "Low Stock Alert!\n\n"
+            for item in low_items:  
+                msg += f"{item[0]} - {item[1]} left\n"
+            messagebox.showwarning("Low Stock", msg)
+    except sqlite3.OperationalError as e:
+        messagebox.showerror("Database Error", f"Could not check stock: {e}")
+
+        
+# ================= ADD PRODUCT =================
+def add_product():  
+    win = tk.Toplevel()
+    win.title("Add Product")
+
+    tk.Label(win, text="Product Code").pack()
+    code = tk.Entry(win); code.pack()
+
+    tk.Label(win, text="Product Name").pack()
+    name = tk.Entry(win); name.pack()
+
+    tk.Label(win, text="Cost Price").pack()
+    cost = tk.Entry(win); cost.pack()
+
+    tk.Label(win, text="Sell Price").pack()
+    sell = tk.Entry(win); sell.pack()
+
+    tk.Label(win, text="Stock Quantity").pack()
+    stock = tk.Entry(win); stock.pack()
+
+    def save_product():  
+        try:  
+            conn = sqlite3.connect(DB)
+            cur = conn.cursor()
+            cur.execute("INSERT INTO products VALUES(?, ?, ?, ?, ?)",  
+                        (code.get(),  
+                         name.get(),  
+                         int(cost.get()),  
+                         int(sell.get()),  
+                         int(stock.get())))
+            conn.commit()
+            conn.close()
+            messagebox.showinfo("Success", "Product Added Successfully")
+            win.destroy()
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Error", "Product Code Already Exists")
+        except Exception as e:
+            messagebox.showerror("Error", f"Invalid Data: {e}")
+
+    tk.Button(win, text="SAVE PRODUCT",  
+              bg="green", fg="white",  
+              command=save_product).pack(pady=10)
+    
+# ================= ADD CUSTOMER =================
+def add_customer():  
+    win = tk.Toplevel()
+    win.title("Add Customer")
+    win.geometry("300x250")
+
+    tk.Label(win, text="Customer Name").pack(pady=5)
+    cname = tk.Entry(win)
+    cname.pack()
+
+    tk.Label(win, text="Mobile Number").pack(pady=5)
+    mobile = tk.Entry(win)
+    mobile.pack()
+
+    def save_customer():  
+        if cname.get()=="" or mobile.get()=="":  
+            messagebox.showerror("Error", "All fields required")
+            return
+
+        try:
+            conn = sqlite3.connect(DB)
+            cur = conn.cursor()
+            cur.execute("INSERT INTO customers(name, mobile) VALUES(?, ?)",  
+                        (cname.get(), mobile.get()))
+            conn.commit()
+            conn.close()
+            messagebox.showinfo("Success", "Customer Added Successfully")
+            win.destroy()
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Error", "Mobile already exists")
+        except Exception as e:
+            messagebox.showerror("Error", f"Database error: {e}")
+
+    tk.Button(win, text="SAVE CUSTOMER",  
+              bg="green", fg="white",  
+              command=save_customer).pack(pady=15)
+
+
+# ================= VIEW CUSTOMERS =================
+def view_customers():  
+    win = tk.Toplevel()
+    win.title("Customer List")
+
+    tree = ttk.Treeview(win,  
+                        columns=("Name", "Mobile"),  
+                        show="headings")
+
+    tree.heading("Name", text="Name")
+    tree.heading("Mobile", text="Mobile")
+    tree.pack(fill="both", expand=True)
+
+    try:
+        conn = sqlite3.connect(DB)
+        cur = conn.cursor()
+        cur.execute("SELECT name, mobile FROM customers")
+        for row in cur.fetchall():  
+            tree.insert("", tk.END, values=row)
+        conn.close()
+    except sqlite3.OperationalError as e:
+        messagebox.showerror("Database Error", f"Could not load customers: {e}")
+
+    
+
+# ================= NEW BILL =================
+def new_bill():  
+    bill = tk.Toplevel()
+    bill.title("New Bill")
+
+    tk.Label(bill, text="Customer Name").pack()
+    cname = tk.Entry(bill); cname.pack()
+
+    tk.Label(bill, text="Mobile").pack()
+    mobile = tk.Entry(bill); mobile.pack()
+
+    def auto_fill(event):  
+        try:
+            conn = sqlite3.connect(DB)
+            cur = conn.cursor()
+            cur.execute("SELECT name FROM customers WHERE mobile=?", (mobile.get(),))
+            data = cur.fetchone()
+            conn.close()
+            if data:  
+                cname.delete(0, tk.END)
+                cname.insert(0, data[0])
+        except sqlite3.OperationalError as e:
+            messagebox.showerror("Database Error", f"Could not auto-fill: {e}")
+
+    mobile.bind("<FocusOut>", auto_fill)
+
+    tk.Label(bill, text="Product Code").pack()
+    pcode = tk.Entry(bill); pcode.pack()
+    pcode.focus()
+
+    listbox = tk.Listbox(bill, width=50)
+    listbox.pack(pady=10)
+
+    items = []
+    total = 0
+    profit = 0
+
+    def add_item():  
+        nonlocal total, profit
+        try:
+            conn = sqlite3.connect(DB)
+            cur = conn.cursor()
+            cur.execute("SELECT name, cost_price, sell_price, stock FROM products WHERE code=?", (pcode.get(),))
+            data = cur.fetchone()
+
+            if data:  
+                name, cost, sell, stock = data
+                if stock <= 0:  
+                    messagebox.showwarning("Stock", "Out of Stock")
+                    conn.close()
+                    return
+                total += sell
+                profit += (sell - cost)
+                items.append((name, sell))
+                listbox.insert(tk.END, f"{name} - ₹{sell}")
+                cur.execute("UPDATE products SET stock=stock-1 WHERE code=?", (pcode.get(),))
+                conn.commit()
+            else:  
+                messagebox.showerror("Error", "Product Not Found")
+            conn.close()
+        except sqlite3.OperationalError as e:
+            messagebox.showerror("Database Error", f"Could not add item: {e}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error adding item: {e}")
+
+        pcode.delete(0, tk.END)
+
+    pcode.bind("<Return>", lambda e: add_item())
+    tk.Button(bill, text="ADD ITEM", command=add_item).pack()
+
+    tk.Label(bill, text="Discount").pack()
+    discount_entry = tk.Entry(bill)
+    discount_entry.insert(0, "0")
+    discount_entry.pack()
+
+    # ✅ Payment Option
+    tk.Label(bill, text="Payment Mode").pack()
+    payment_var = tk.StringVar()
+    payment_var.set("UPI")
+
+    payment_box = ttk.Combobox(bill,  
+                               textvariable=payment_var,  
+                               state="readonly")
+    payment_box["values"] = ("UPI", "Cash")
+    payment_box.pack()
+
+    # ✅ SAVE BILL
+    def save_bill():  
+
+        if cname.get() == "":  
+            messagebox.showerror("Error", "Customer Name Required")
+            return
+
+        try:
+            discount = int(discount_entry.get())
+        except ValueError:
+            messagebox.showerror("Error", "Invalid discount value")
+            return
+
+        subtotal = total
+        final_total = total - discount
+
+        bill_no = "RS" + datetime.now().strftime("%H%M%S")
+
+        try:
+            conn = sqlite3.connect(DB)
+            cur = conn.cursor()
+
+            cur.execute("""
+            INSERT INTO bills
+            (bill_no, customer, mobile, total, discount, final_total, profit, payment, date)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,  
+            (
+                bill_no,  
+                cname.get(),  
+                mobile.get(),  
+                subtotal,  
+                discount,  
+                final_total,  
+                profit,  
+                payment_var.get(),  
+                datetime.now().strftime("%d-%m-%Y %H:%M")
+            ))
+
+            conn.commit()
+            conn.close()
+
+            generate_invoice(
+                bill_no,  
+                cname.get(),  
+                mobile.get(),  
+                items,  
+                subtotal,  
+                discount,  
+                final_total,  
+                payment_var.get()
+            )
+
+            messagebox.showinfo(
+                "Saved",  
+                f"Bill Saved ₹{final_total}"
+            )
+
+            bill.destroy()
+        except sqlite3.OperationalError as e:
+            messagebox.showerror("Database Error", f"Could not save bill: {e}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error saving bill: {e}")
+
+    # BUTTON
+    tk.Button(
+        bill, 
+        text="SAVE BILL",  
+        bg="green",  
+        fg="white",  
+        command=save_bill
+    ).pack(pady=10)
+
+    
+# ================= MODERN INVOICE =================
+def generate_invoice(bill_no, name, mobile, items,  
+                     subtotal, discount,  
+                     final_total, payment):  
+
+    file = f"{bill_no}.pdf"
+
+    doc = SimpleDocTemplate(
+        file,  
+        pagesize=A5,  
+        leftMargin=20,  
+        rightMargin=20,  
+        topMargin=20,  
+        bottomMargin=20
+    )
+
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # FONT SUPPORT ₹
+    font_path = "DejaVuSans.ttf"
+
+    if os.path.exists(font_path):  
+        pdfmetrics.registerFont(
+            TTFont("DejaVu", font_path)
+        )
+        font_name = "DejaVu"
+    else:  
+        font_name = "Helvetica"
+
+    # ================= LOGO =================
+
+    if os.path.exists("logo.png"):  
+
+        logo = Image(
+            "logo.png",  
+            width=400,  
+            height=140
+        )
+
+        logo.hAlign = "CENTER"
+
+        elements.append(logo)
+
+    elements.append(Spacer(1, 15))
+
+    # ================= CUSTOMER INFO =================
+
+    buyer = f"""
+<b><font size=11>Buyer Details : </font></b><br/><br/>
+{name}<br/>
+Mobile :  {mobile}
+"""
+
+    invoice_info = f"""
+<b>Invoice Date : </b> {datetime.now().strftime('%d-%m-%Y')}<br/>
+<b>Invoice No : </b> {bill_no}<br/>
+<b>Payment Mode : </b> {payment}
+"""
+
+    info = Table([[
+        Paragraph(buyer, styles["Normal"]),  
+
+        Paragraph(
+            invoice_info,  
+            ParagraphStyle(
+                name="right",  
+                alignment=TA_RIGHT
+            )
+        )
+    ]],  
+    colWidths=[250, 150])
+
+    elements.append(info)
+    elements.append(Spacer(1, 20))
+
+    # ================= ITEM TABLE =================
+
+   data = [["Qty", "Description", "Unit Price", "Tax", "Total"]]
+
+subtotal = 0
+tax_total = 0
+
+# ---------- ITEMS ----------
+for item in items:
+
+    price = float(item[1])
+    tax = round(price * 0.10, 2)
+    total = price + tax
+
+    subtotal += price
+    tax_total += tax
+
+    data.append([
+        1,
+        item[0],
+        f"₹{price:.2f}",
+        f"₹{tax:.2f}",
+        f"₹{total:.2f}"
+    ])
+
+# ---------- ADD EMPTY ROWS (AFTER LOOP) ----------
+for _ in range(4):
+    data.append(["", "", "", "", ""])
+
+    table = Table(
+        data,  
+        colWidths=[40, 170, 70, 50, 70],  
+        repeatRows=1
+    )
+
+   table.setStyle(TableStyle([
+
+    ("FONTNAME", (0, 0), (-1, -1), font_name),
+
+    ("BACKGROUND", (0, 0), (-1, 0),
+     colors.HexColor("#2f5fb3")),
+
+    ("TEXTCOLOR", (0, 0), (-1, 0),
+     colors.white),
+
+    ("GRID", (0, 0), (-1, -1),
+     0.5, colors.grey),
+
+    ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+
+    ("ROWBACKGROUNDS", (0, 1), (-1, -1),
+     [colors.whitesmoke, colors.lightgrey])
+
+]))
+
+elements.append(table)
+elements.append(Spacer(1, 20))
+
+    # ================= TOTAL =================
+
+  total_table = Table([
+
+    ["Subtotal", f"₹{subtotal:.2f}"],
+    ["Tax", f"₹{tax_total:.2f}"],
+    ["Discount", f"- ₹{discount:.2f}"],
+    ["TOTAL", f"₹{final_total:.2f}"]
+
+], colWidths=[300, 90])
+
+  total_table.setStyle(TableStyle([
+
+    # GRAND TOTAL BLUE
+    ("BACKGROUND", (0, 3), (-1, 3),
+     colors.HexColor("#2f5fb3")),
+
+    ("TEXTCOLOR", (0, 3), (-1, 3),
+     colors.white),
+
+    ("FONTNAME", (0, 3), (-1, 3),
+     "Helvetica-Bold"),
+
+    ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+
+    ("GRID", (0, 0), (-1, -2),
+     0.5, colors.grey)
+
+]))
+
+elements.append(total_table)
+elements.append(Spacer(1, 25))
+
+    # ================= FOOTER =================
+
+  footer = Paragraph(
+    "<b>Thank you for your business!</b><br/><br/>",
+    ParagraphStyle(name="footer", alignment=TA_CENTER)
+)
+
+elements.append(footer)
+doc.build(elements)
+
+    # OPEN PDF
+
+    try:  
+        os.startfile(file)
+    except:  
+        import subprocess
+        subprocess.Popen([file], shell=True)
+        
+# ================= STOCK REPORT =================
+def stock_report():  
+    win = tk.Toplevel()
+    win.title("Stock Report")
+
+    tree = ttk.Treeview(win,  
+                        columns=("Code", "Name", "Stock"),  
+                        show="headings")
+
+    tree.heading("Code", text="Code")
+    tree.heading("Name", text="Name")
+    tree.heading("Stock", text="Stock")
+
+    tree.pack(fill="both", expand=True)
+
+    try:
+        conn = sqlite3.connect(DB)
+        cur = conn.cursor()
+        cur.execute("SELECT code, name, stock FROM products")
+        for row in cur.fetchall():  
+            tree.insert("", tk.END, values=row)
+        conn.close()
+    except sqlite3.OperationalError as e:
+        messagebox.showerror("Database Error", f"Could not load stock report: {e}")
+
+    
+# ================= BILL HISTORY =================
+def bill_history():  
+    win = tk.Toplevel()
+    win.title("Bill History")
+
+    tree = ttk.Treeview(win,  
+                        columns=("Bill", "Customer", "Total", "Date"),  
+                        show="headings")
+
+    tree.heading("Bill", text="Bill No")
+    tree.heading("Customer", text="Customer")
+    tree.heading("Total", text="Total")
+    tree.heading("Date", text="Date")
+
+    tree.pack(fill="both", expand=True)
+
+    try:
+        conn = sqlite3.connect(DB)
+        cur = conn.cursor()
+        cur.execute("SELECT bill_no, customer, final_total, date FROM bills")
+        for row in cur.fetchall():  
+            tree.insert("", tk.END, values=row)
+        conn.close()
+    except sqlite3.OperationalError as e:
+        messagebox.showerror("Database Error", f"Could not load bill history: {e}")
+
+# ================= DAILY REPORT =================
+def daily_report():  
+    today = datetime.now().strftime("%d-%m-%Y")
+
+    try:
+        conn = sqlite3.connect(DB)
+        cur = conn.cursor()
+
+        cur.execute("SELECT SUM(final_total), SUM(profit) FROM bills WHERE date LIKE ?",  
+                    (f"%{today}%",))
+
+        data = cur.fetchone()
+        conn.close()
+
+        sales = data[0] if data[0] else 0
+        profit = data[1] if data[1] else 0
+
+        messagebox.showinfo("Daily Report",  
+                            f"Today's Sales: ₹{sales}\nToday's Profit: ₹{profit}")
+    except sqlite3.OperationalError as e:
+        messagebox.showerror("Database Error", f"Could not generate daily report: {e}")
+
+# ================= PROFIT REPORT =================
+def profit_report():  
+    try:
+        conn = sqlite3.connect(DB)
+        cur = conn.cursor()
+
+        cur.execute("SELECT SUM(profit) FROM bills")
+        total = cur.fetchone()[0]
+        conn.close()
+
+        messagebox.showinfo("Profit Report",  
+                            f"Total Profit: ₹{total if total else 0}")
+    except sqlite3.OperationalError as e:
+        messagebox.showerror("Database Error", f"Could not generate profit report: {e}")
+
+# ================= PURCHASE ENTRY =================
+def purchase_entry():  
+    win = tk.Toplevel()
+    win.title("Purchase Entry")
+
+    tk.Label(win, text="Product Code").pack()
+    code = tk.Entry(win); code.pack()
+
+    tk.Label(win, text="Supplier Name").pack()
+    supplier = tk.Entry(win); supplier.pack()
+
+    tk.Label(win, text="Quantity").pack()
+    qty = tk.Entry(win); qty.pack()
+
+    def add_stock():  
+        try:
+            conn = sqlite3.connect(DB)
+            cur = conn.cursor()
+
+            cur.execute("UPDATE products SET stock=stock+? WHERE code=?",  
+                        (int(qty.get()), code.get()))
+
+            cur.execute("""INSERT INTO purchases
+                           (product_code, supplier, qty, date)
+                           VALUES(?, ?, ?, ?)""",  
+                        (code.get(),  
+                         supplier.get(),  
+                         int(qty.get()),  
+                         datetime.now().strftime("%d-%m-%Y %H:%M")))
+
+            conn.commit()
+            conn.close()
+
+            messagebox.showinfo("Success", "Stock Updated")
+            win.destroy()
+        except sqlite3.OperationalError as e:
+            messagebox.showerror("Database Error", f"Could not update stock: {e}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error updating stock: {e}")
+
+    tk.Button(win, text="ADD STOCK",  
+              bg="green", fg="white",  
+              command=add_stock).pack(pady=10)
+    
+# ================= LOGIN WINDOW =================
+login = tk.Tk()
+login.title("RS Mobiles Login")
+login.geometry("300x250")
+
+tk.Label(login, text="RS MOBILES", font=("Arial", 18, "bold")).pack(pady=20)
+
+user = tk.Entry(login); user.pack(); user.insert(0, "admin")
+pwd = tk.Entry(login, show="*"); pwd.pack(); pwd.insert(0, "1234")
+
+tk.Button(login, text="LOGIN", command=check_login).pack(pady=20)
+
+login.mainloop()
