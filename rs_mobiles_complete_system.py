@@ -22,12 +22,16 @@ class MobileSystem:
         else:
             raise ValueError('Insufficient stock')
 
-    def generate_invoice(self, customer_name, items):
+    def generate_invoice(self, customer_name, items, bill_version='cash'):
+        if bill_version.lower() not in {'cash', 'upi'}:
+            raise ValueError("bill_version must be 'cash' or 'upi'")
+
         total = sum(self.products[item]['price'] * qty for item, qty in items.items())
         print(f'Invoice for {customer_name}')
+        print(f"Bill Version: {'Cash Bill' if bill_version.lower() == 'cash' else 'UPI'}")
         for item, qty in items.items():
             product = self.products[item]
-            print(f'{product['name']} (x{qty}): ${product['price'] * qty}')
+            print(f"{product['name']} (x{qty}): ${product['price'] * qty}")
         print(f'Total: ${total}')
 
     def auto_fill_customer_info(self, customer_id):
@@ -51,6 +55,6 @@ system = MobileSystem()
 system.add_product('001', 'Smartphone', 299.99, '1234567890123')
 system.update_stock('001', 50)
 customer_info = system.auto_fill_customer_info('cust123')
-system.generate_invoice(customer_info['name'], {'001': 2})
+system.generate_invoice(customer_info['name'], {'001': 2}, bill_version='cash')
 system.display_stock()
 
